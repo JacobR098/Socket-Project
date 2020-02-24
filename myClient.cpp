@@ -68,15 +68,29 @@ int main(int argc, char *argv[])
 	for( int i = 0; i < ITERATIONS; i++ )
 	{
 	  getline(cin, command);
-	  message message = createMessage(command);
-	  message.printMessage();
-	  cout << sizeof(message);
-    	/* Send the struct to the server */
-	  if(sendto(servSock, &message, sizeof(message), 0, (struct sockaddr *) &echoServAddr, sizeof(echoServAddr)) != sizeof(message))//size of 96
+	  int* size = new int;
+	  message myMessage = createMessage(command);
+	  //myMessage.printMessage();
+	  //return 0;
+	  //cout << sizeof(message);
+	  //memcpy(echoBuffer, (char*)&myMessage, 176);
+	  //message* mess2;
+	  //memcpy(mess2, (message*)echoBuffer, 176);
+	  //mess2->printMessage();
+	  /* Send the struct to the server */
+	  char* messageArray = encode(myMessage, size);
+	  message decodedMsg = decode(messageArray);
+	  decodedMsg.printMessage();
+	  //cout << endl;
+
+	  memcpy(echoBuffer, messageArray, *size);
+	  
+	  //	  for(;;){
+	  if(sendto(servSock, &echoBuffer, sizeof(echoBuffer), 0, (struct sockaddr *) &echoServAddr, sizeof(echoServAddr)) != sizeof(echoBuffer))//size of 96
 	    DieWithError("sendto() sent a different number of bytes than expected");
 	  
 	
-	cout << "Client sent message " << message.msgType << " to server.\n";
+	  cout << "Client sent message " << myMessage.msgType << " to server.\n";
 
     	/* Recv a response */
 

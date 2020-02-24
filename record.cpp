@@ -5,6 +5,52 @@
 #include <string>
 
 #define CHARLENGTH 21
+enum State{
+  Free, Leader, InDHT //0: Free, 1:Leader, 2: InDHT
+};
+
+struct user {
+  char userName[CHARLENGTH];
+  State state; //0: Free, 1:Leader, 2: InDHT
+  unsigned short port[3];
+  user(){
+    memset(userName, 0, CHARLENGTH);
+    state = Free;
+    for(short i: port){
+      i = 0;
+    }
+  }
+
+  user(char* name, unsigned short* sockets){
+    memcpy(userName, name, CHARLENGTH);
+    state = Free;
+    for(int i = 0; i < 3; i++){
+      port[i] = sockets[i];
+    } 
+  }
+};
+
+bool userExists(std::vector<struct user> vec, struct user newUser){
+  bool exists = false;
+  for(int i = 0; i < vec.size(); i++){
+    if(strcmp(newUser.userName, vec[i].userName) == 0){
+      exists = true;
+      break;
+    }
+    for(int j = 0; j < 3; j++){
+      for(int k = 0; k < 3; k++){
+	if(newUser.port[j] == vec[i].port[k]){
+	  exists = true;
+	  break;
+	  }
+      }
+      break;
+    }
+    break;
+  }
+  return exists;
+}
+
 struct record {
   std::string Country_Code, Short_Name, Table_Name, Long_Name, Alpha_Code, Currency, Region, WB_Code, Latest_Census;
     record(std::istream& stream){
@@ -46,25 +92,27 @@ struct record {
 
 
 
-//Size 46 bytes
+//Size 48 bytes
 struct userInfo {
   char userName[CHARLENGTH];
   char inAddress[CHARLENGTH];
   unsigned short ports[3]; //0: query port, 1: left port, 2: right port
   
 };
-//Size 162
+//Size 176
 struct message {
+  int code; 
   int header; //0: query , 1: SUCCESS, 2: FAILURE
   char msgType[CHARLENGTH];
   int num;
   char senderName[CHARLENGTH];
   char inAddress[CHARLENGTH];
-  unsigned short port[3];
+  unsigned short port[3]; //0: query port, 1: left port, 2: right port
   userInfo neighbors[2];
 
   message(){
     header = 0;
+    code = 0;
     memset(msgType, 0, CHARLENGTH);
     num = 0;
     memset(senderName, 0, CHARLENGTH);
@@ -79,6 +127,7 @@ struct message {
   }
 
   void printMessage(){
+    std::cout << "code: " << code << std::endl; 
     std::cout << "header: " << header << std::endl;
     std::cout << "msgType: " << msgType << std::endl;
     std::cout << "num: " << num << std::endl;
@@ -106,6 +155,7 @@ message createMessage(std::string str){
   std::vector<std::string> segments = removeSpace(str);
   std::size_t length;
   if(segments[0] == "register"){
+    msg.code = 1;
     length = segments[0].copy(msg.msgType, CHARLENGTH - 1);
     msg.msgType[length] = '\0'; 
     length = segments[1].copy(msg.senderName, CHARLENGTH - 1);
@@ -119,27 +169,131 @@ message createMessage(std::string str){
     msg.port[2] = (short)std::stoi(segments[5]);
   }
   else if(segments[0] == "setup-dht"){    
-    length = segments[0].copy(msg.msgType, CHARLENGTH - 1);
-    msg.msgType[length] = '\0'; 
+    msg.code = 2;
+    //length = segments[0].copy(msg.msgType, CHARLENGTH - 1);
+    //msg.msgType[length] = '\0'; 
     msg.num = stoi(segments[1]);
     length = segments[2].copy(msg.senderName, CHARLENGTH - 1);
     msg.senderName[length] = '\0';         
   }
   else if(segments[0] == "dht-complete"){
-    length = segments[0].copy(msg.msgType, CHARLENGTH - 1);
-    msg.msgType[length] = '\0'; 
+    msg.code = 3;
+    //length = segments[0].copy(msg.msgType, CHARLENGTH - 1);
+    //msg.msgType[length] = '\0'; 
     length = segments[1].copy(msg.senderName, CHARLENGTH - 1);
     msg.senderName[length] = '\0';     
   }
   else if(segments[0] == "query-dht"){
-    length = segments[0].copy(msg.msgType, CHARLENGTH - 1);
-    msg.msgType[length] = '\0'; 
+    msg.code = 4;
+    //length = segments[0].copy(msg.msgType, CHARLENGTH - 1);
+    //msg.msgType[length] = '\0'; 
     length = segments[1].copy(msg.senderName, CHARLENGTH - 1);
     msg.senderName[length] = '\0';     
   }
   return msg;
 }
 
+char* encode(message msg, int* size){
+  char* arr;//= new char[176];
+  
+  int index = 0;
+  switch (msg.code){
+    
+  case 1://register <user-name> <ip-Address> <query-port>  <left-port> <right-port>    
+    arr = new char[64];
+    *size = 64;
+    memcpy(arr, std::to_string(msg.code).c_str(), sizeof(int));
+    index += sizeof(int);
+    //memcpy(arr, msg.msgType, CHARLENGTH);    
+    memcpy(arr + index, msg.senderName, CHARLENGTH);
+    index += CHARLENGTH;
+    memcpy(arr + index, msg.inAddress, CHARLENGTH);
+    index += CHARLENGTH;
+    memcpy(arr + index, std::to_string(msg.port[0]).c_str(), 6);
+    /* char pp[9];
+    memcpy(pp, std::to_string(msg.port[0]).c_str(), 6);    
+    for(int i =0; i < 10; i++){
+      std::cout << "pp[" << i << "]: " <<  pp[i] << std::endl;
+    }
+    {
+      unsigned short s = (short)atoi(pp);
+      std::cout << "Short value is: " << s << std::endl;
+      }*/
+    index += 6;
+    memcpy(arr + index, std::to_string(msg.port[1]).c_str(), 6);
+    index += 6;
+    memcpy(arr + index, std::to_string(msg.port[2]).c_str(), 6);
+    index += 6;    
+    break;
+  case 2://setup-dht <n> <user-name>
+    arr = new char[29];
+    *size = 29;
+    memcpy(arr, std::to_string(msg.code).c_str(), sizeof(int));
+    index += sizeof(int);
+    memcpy(arr + index, std::to_string(msg.num).c_str(), sizeof(int));
+    index += sizeof(int);
+    memcpy(arr + index, msg.senderName, CHARLENGTH);
+    break;
+  case 3: //dht-complete <user-name>
+    arr = new char[25];
+    *size = 25;
+    memcpy(arr, std::to_string(msg.code).c_str(), sizeof(int));
+    index += sizeof(int);
+    memcpy(arr + index, msg.senderName, CHARLENGTH);
+    break;
+  case 4: // query-dht <user-name>
+    arr = new char[25];
+    *size = 25;
+    memcpy(arr, std::to_string(msg.code).c_str(), sizeof(int));
+    index += sizeof(int);
+    memcpy(arr + index, msg.senderName, CHARLENGTH);
+    break;
+  }
+  return arr;
+}
+
+message decode(char* arr){  
+  message msg;
+  char buffer[CHARLENGTH]; //Create buffer to use memcpy on
+  memset(buffer, 0, CHARLENGTH);//Initialize to '\0'
+  memcpy(buffer, arr, sizeof(int));
+  std::cout << "buffer: " << buffer << "\n"; 
+  
+  int index = 0;
+  msg.code = atoi(buffer);
+  index += sizeof(int);  
+  switch (msg.code) {
+  case 1:
+    std::cout << "Code decoded corresponds to register\n";    
+    memcpy(msg.senderName, arr + index, CHARLENGTH);
+    index += CHARLENGTH;
+    memcpy(msg.inAddress, arr + index, CHARLENGTH);
+    index += CHARLENGTH;
+    for(int i = 0; i < 3; i++){
+      memcpy(buffer, arr + index, 6);
+      msg.port[i] = (unsigned short)atoi(buffer); 
+      index += 6;
+    }
+      break;
+    case 2:
+      std::cout << "Code decoded corresponds to setup-dht\n";
+      memcpy(buffer, arr + index, sizeof(int));
+      msg.num = atoi(buffer);
+      index += sizeof(int);
+      memcpy(msg.senderName, arr + index, CHARLENGTH);
+      break;
+    case 3:
+      std::cout << "Code decoded corresponds to dht-complete\n";
+      memcpy(msg.senderName, arr + index, CHARLENGTH);
+      break;
+    case 4:
+      std::cout << "Code decoded corresponds to query-dht\n";
+      memcpy(msg.senderName, arr + index, CHARLENGTH);
+      break;
+
+  }
+  return msg;
+}
 
 /*
 int main(){
@@ -148,3 +302,5 @@ int main(){
   std::cout << "Size of message is: " << sizeof(message) << std::endl;
 }
 */
+
+

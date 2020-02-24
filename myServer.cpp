@@ -7,7 +7,7 @@
 #include <string.h>     /* for memset() */
 #include <unistd.h>     /* for close() */
 #include "record.cpp"
-
+#include <iostream>
 #define ECHOMAX 255     /* Longest string to echo */
 
 void DieWithError(const char *errorMessage) /* External error handling function */
@@ -16,6 +16,7 @@ void DieWithError(const char *errorMessage) /* External error handling function 
     exit(1);
 }
 
+using namespace std;
 int main(int argc, char *argv[])
 {  
     unsigned int c;
@@ -41,7 +42,11 @@ int main(int argc, char *argv[])
     }
 
     echoServPort = atoi(argv[1]);  /* First arg:  local port */
-
+    
+    vector<struct user> stateTable;    
+    
+    
+    
     /* Create socket for sending/receiving datagrams */
     if ((sock = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0)
         DieWithError("socket() failed");
@@ -64,15 +69,28 @@ int main(int argc, char *argv[])
 	message m1;
 	  
         /* Block until receive message from a client */
-        if ((recvMsgSize = recvfrom(sock, &m1, sizeof(m1), 0, (struct sockaddr *) &echoClntAddr, &cliAddrLen)) < 0)
+        if ((recvMsgSize = recvfrom(sock, echoBuffer, ECHOMAX, 0, (struct sockaddr *) &echoClntAddr, &cliAddrLen)) < 0)
             DieWithError("recvfrom() failed");
 	
-	//echoBuffer[ recvMsgSize ] = '\0';
+	cout << "Server received " << recvMsgSize << " bytes from client." << endl;
+	echoBuffer[ recvMsgSize ] = '\0';
 	
-
-        printf("Server handling client %s\n", inet_ntoa( echoClntAddr.sin_addr ));
-        //printf("Server receives string: %s\n", echoBuffer );
+	m1 = decode(echoBuffer);
 	m1.printMessage();
+	if(m1.code == 1){//register request
+	  struct user newUser(m1.senderName, m1.port);
+	  if(userExists(stateTable, newUser)){
+	     //return FAILURE
+	    cout << "Not added: DUPLCIATE\n";
+	    }
+	    else{
+	      stateTable.push_back(newUser);
+	      cout << "SUCCESS\n";
+	      //return SUCCESS;
+	    }	    
+	}
+	
+	
         /* Send received datagram back to the client */
         if (sendto(sock, echoBuffer, strlen(echoBuffer), 0, (struct sockaddr *) &echoClntAddr, sizeof(echoClntAddr)) != strlen(echoBuffer))
             DieWithError("sendto() sent a different number of bytes than expected");
