@@ -4,7 +4,7 @@
 #include <sstream>
 #include <string>
 
-#define CHARLENGTH 21
+#define CHARLENGTH 16
 enum State {
 	Free, Leader, InDHT //0: Free, 1:Leader, 2: InDHT
 };
@@ -69,30 +69,96 @@ bool userExists(std::vector<struct user> vec, char* userName) {
 	return exists;
 }
 
-struct record {
-	std::string Country_Code, Short_Name, Table_Name, Long_Name, Alpha_Code, Currency, Region, WB_Code, Latest_Census;
-	record(std::istream& stream) {
+int indexOfUser(std::vector<struct user> vec, char* userName) {
+	int index = -1;
+	for (unsigned int i = 0; i < vec.size(); i++) {
+		if (strcmp(vec[i].userName, userName) == 0) {
+			index = i;
+		}
+	}
+	return index;
+}
 
-		getline(stream, Country_Code, ',');
-		getline(stream, Short_Name, ',');
-		getline(stream, Table_Name, ',');
-		getline(stream, Long_Name, ',');
-		getline(stream, Alpha_Code, ',');
-		getline(stream, Currency, ',');
-		getline(stream, Region, ',');
-		getline(stream, WB_Code, ',');
-		getline(stream, Latest_Census, '\n');
+//Is only called if UserExists returns true, and therefore will be okay to return Free if user is not found because this scenario will not occur when this function is called
+State stateOfUser(std::vector<struct user> vec, char* userName) {
+	State result = Free;
+	for (unsigned int i = 0; i < vec.size(); i++) {
+		if (strcmp(vec[i].userName, userName) == 0)
+			result = vec[i].state;
+	}
+	return result;
+}
+
+struct record {
+	//std::string Country_Code, Short_Name, Table_Name, Long_Name, Alpha_Code, Currency, Region, WB_Code, Latest_Census;
+	char Country_Code[4];
+	char Short_Name[100];
+	char Table_Name[100];
+	char Long_Name[100];
+	char Alpha_Code[3];
+	char Currency[100];
+	char Region[100];
+	char WB_Code[3];
+	char Latest_Census[100];
+	record* next;
+
+	record(std::istream& stream) {
+		std::string S_Country_Code, S_Short_Name, S_Table_Name, S_Long_Name, S_Alpha_Code, S_Currency, S_Region, S_WB_Code, S_Latest_Census;
+		getline(stream, S_Country_Code, ',');
+		getline(stream, S_Short_Name, ',');
+		getline(stream, S_Table_Name, ',');
+		getline(stream, S_Long_Name, ',');
+		getline(stream, S_Alpha_Code, ',');
+		getline(stream, S_Currency, ',');
+		getline(stream, S_Region, ',');
+		getline(stream, S_WB_Code, ',');
+		getline(stream, S_Latest_Census, '\n');
+		
+
+		std::size_t length;
+		length = S_Country_Code.copy(Country_Code, 4 - 1);
+		Country_Code[length] = '\0';
+		length = S_Short_Name.copy(Short_Name, 100 - 1);
+		Short_Name[length] = '\0';
+		length = S_Table_Name.copy(Table_Name, 100 - 1);
+		Table_Name[length] = '\0';
+		length = S_Long_Name.copy(Long_Name, 100 - 1);
+		Long_Name[length] = '\0';
+		length = S_Alpha_Code.copy(Alpha_Code, 3 - 1);
+		Alpha_Code[length] = '\0';
+		length = S_Currency.copy(Currency, 100 - 1);
+		Currency[length] = '\0';
+		length = S_Region.copy(Region, 100 - 1);
+		Region[length] = '\0';
+		length = S_WB_Code.copy(WB_Code, 3 - 1);
+		WB_Code[length] = '\0';
+		length = S_Latest_Census.copy(Latest_Census, 100 - 1);
+		Latest_Census[length] = '\0';
+		next = NULL;
 	}
 	record() {
-		Country_Code = "";
-		Short_Name = "";
-		Table_Name = "";
-		Long_Name = "";
-		Alpha_Code = "";
-		Currency = "";
-		Region = "";
-		WB_Code = "";
-		Latest_Census = "";
+		Country_Code[0] = '\0';
+		Short_Name[0] = '\0';
+		Table_Name[0] = '\0';
+		Long_Name[0] = '\0';
+		Alpha_Code[0] = '\0';
+		Currency[0] = '\0';
+		Region[0] = '\0';
+		WB_Code[0] = '\0';
+		Latest_Census[0] = '\0';
+		next = NULL;
+	}
+	void copyTo(record& newRecord) {
+		strcpy(newRecord.Alpha_Code, Alpha_Code);
+		strcpy(newRecord.Country_Code, Country_Code);
+		strcpy(newRecord.Currency, Currency);
+		strcpy(newRecord.Latest_Census, Latest_Census);
+		strcpy(newRecord.Long_Name, Long_Name);
+		strcpy(newRecord.Region, Region);
+		strcpy(newRecord.Short_Name, Short_Name);
+		strcpy(newRecord.Table_Name, Table_Name);
+		strcpy(newRecord.WB_Code, WB_Code);
+		newRecord.next = next;
 	}
 	void print() {
 		std::cout << Country_Code << ",";
@@ -120,20 +186,24 @@ struct userInfo {
 //Size 176
 struct message {
 	int code; 
-	int header; //0: query , 1: SUCCESS, 2: FAILURE
-	char msgType[CHARLENGTH];
+	int header; //0: query , 1: SUCCESS, -1: FAILURE
+	char msgType[CHARLENGTH];	
 	int num;
+	int id;
 	char senderName[CHARLENGTH];
 	char inAddress[CHARLENGTH];
 	unsigned short port[3]; //0: query port, 1: left port, 2: right port
 	userInfo neighbors[2];
-	userInfo* random;
+	record currentRecord;
+	userInfo random;
+	char searchName[100];
 
 	message() {
-		header = 0;
 		code = 0;
+		header = 0;
 		memset(msgType, 0, CHARLENGTH);
 		num = 0;
+		id = 0;
 		memset(senderName, 0, CHARLENGTH);
 		memset(inAddress, 0, CHARLENGTH);
 		memset(&port, 0, sizeof(short) * 3);
@@ -143,10 +213,39 @@ struct message {
 		memset(neighbors[1].userName, 0, CHARLENGTH);
 		memset(neighbors[1].inAddress, 0, CHARLENGTH);
 		memset(neighbors[1].ports, 0, sizeof(short) * 3);
+		memset(random.userName, 0, CHARLENGTH);
+		memset(random.inAddress, 0, CHARLENGTH);
+		memset(random.ports, 0, sizeof(short) * 3);
+		memset(searchName, 0, 100);
 	}
 
 	void printMessage() {
-		std::cout << "code: " << code << std::endl;
+		if (header == 0) {
+			switch (code) {
+			case 1:
+				std::cout << "register " << senderName << " " << inAddress;
+				for (unsigned short x : port) {
+					std::cout << " " << x;
+				}
+				std::cout << std::endl;
+				break;
+			case 2:
+				std::cout << "setup-dht " << num << " " << senderName << std::endl;
+				break;
+			case 3:
+				std::cout << "dht-complete " << senderName << std::endl;
+				break;
+			case 4:
+				std::cout << "query-dht " << senderName << std::endl;
+					break;
+			case 5:
+				std::cout << "leave-dht " << senderName << std::endl;
+				break;
+			//case 6:
+				//std::cout << "dht-rebuilt " << senderName
+			}
+		}
+		/*std::cout << "code: " << code << std::endl;
 		std::cout << "header: " << header << std::endl;
 		std::cout << "msgType: " << msgType << std::endl;
 		std::cout << "num: " << num << std::endl;
@@ -154,7 +253,7 @@ struct message {
 		std::cout << "inAddress: " << inAddress << std::endl;
 		for (int i = 0; i < 3; i++) {//for each loop not working, starts printing from port[1]
 			std::cout << "port[" << i << "]: " << port[i] << "\n";
-		}
+		}*/
 		//std::cout << "Print neighbors function" << std::endl;    
 	}
 
@@ -169,7 +268,7 @@ struct message {
 			std::cout << "port[" << i << "]: " << port[i] << "\n";
 		}
 		//std::cout << "Print neighbors function" << std::endl;    
-		for (int i = 0; i < numUsers; i++) {
+		/*for (int i = 0; i < numUsers; i++) {
 			std::cout << "user[" << i << "]: ";
 			std::cout << random[i].userName << "\t";
 			std::cout << random[i].inAddress << "\t";
@@ -177,7 +276,7 @@ struct message {
 				std::cout << "ports[" << j << "] " << random[i].ports[j] << "\t";
 			}
 			std::cout << "\n";
-		}
+		}*/
 	}
 };
 
@@ -197,6 +296,7 @@ message createMessage(std::string str) {
 	std::size_t length;
 	if (segments[0] == "register") {
 		msg.code = 1;
+		msg.header = 0;
 		length = segments[0].copy(msg.msgType, CHARLENGTH - 1);
 		msg.msgType[length] = '\0';
 		length = segments[1].copy(msg.senderName, CHARLENGTH - 1);
@@ -211,6 +311,7 @@ message createMessage(std::string str) {
 	}
 	else if (segments[0] == "setup-dht") {
 		msg.code = 2;
+		msg.header = 0;
 		//length = segments[0].copy(msg.msgType, CHARLENGTH - 1);
 		//msg.msgType[length] = '\0'; 
 		msg.num = stoi(segments[1]);
@@ -219,6 +320,7 @@ message createMessage(std::string str) {
 	}
 	else if (segments[0] == "dht-complete") {
 		msg.code = 3;
+		msg.header = 0;
 		//length = segments[0].copy(msg.msgType, CHARLENGTH - 1);
 		//msg.msgType[length] = '\0'; 
 		length = segments[1].copy(msg.senderName, CHARLENGTH - 1);
@@ -226,14 +328,28 @@ message createMessage(std::string str) {
 	}
 	else if (segments[0] == "query-dht") {
 		msg.code = 4;
+		msg.header = 0;
 		//length = segments[0].copy(msg.msgType, CHARLENGTH - 1);
 		//msg.msgType[length] = '\0'; 
 		length = segments[1].copy(msg.senderName, CHARLENGTH - 1);
 		msg.senderName[length] = '\0';
 	}
+	else if (segments[0] == "leave-dht") {
+		msg.code = 5;
+		msg.header = 0;
+		length = segments[1].copy(msg.senderName, CHARLENGTH - 1);
+		msg.senderName[length] = '\0';
+	}
+	//---NOT FINISHED---
+	else if (segments[0] == "dht-rebuilt") {
+		msg.code = 6;
+		msg.header = 0;
+		length = segments[1].copy(msg.senderName, CHARLENGTH - 1);
+		msg.senderName[length] = '\0';
+	}
 	return msg;
 }
-
+/*
 char* encode(message msg, int* size) {
 	char* arr;//= new char[176];
 
@@ -268,7 +384,7 @@ char* encode(message msg, int* size) {
 	   {
 		  unsigned short s = (short)atoi(pp);
 		  std::cout << "Short value is: " << s << std::endl;
-		  }*/
+		  }
 		index += 6;
 		memcpy(arr + index, std::to_string(msg.port[1]).c_str(), 6);
 		index += 6;
@@ -384,6 +500,7 @@ message decode(char* arr) {
 		return msg;
 	}
 }
+*/
 
 /*
 int main(){
