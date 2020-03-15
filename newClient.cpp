@@ -179,13 +179,13 @@ void sendCommand() {
 			for (int i = 0; i < LINES_OF_DATA; i++) {
 				ASCII_Sum = 0;
 				currentRecord = record(in);
-				//currentRecord.print();
+				currentRecord.print();
 				int j = 0;
 				while (currentRecord.Long_Name[j] != '\0') {
 					ASCII_Sum += currentRecord.Long_Name[j];
 					j++;
 				}
-				cout << "ASCII Sum for record " << i << " is: " << ASCII_Sum << endl;
+				//cout << "ASCII Sum for record " << i << " is: " << ASCII_Sum << endl;
 				int pos, id;
 				pos = ASCII_Sum % HASH_TABLE_SIZE;
 				id = pos % ringSize;

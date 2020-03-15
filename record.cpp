@@ -5,6 +5,8 @@
 #include <string>
 
 #define CHARLENGTH 16
+
+bool consumeComma = false;
 enum State {
 	Free, Leader, InDHT //0: Free, 1:Leader, 2: InDHT
 };
@@ -104,15 +106,117 @@ struct record {
 
 	record(std::istream& stream) {
 		std::string S_Country_Code, S_Short_Name, S_Table_Name, S_Long_Name, S_Alpha_Code, S_Currency, S_Region, S_WB_Code, S_Latest_Census;
-		getline(stream, S_Country_Code, ',');
-		getline(stream, S_Short_Name, ',');
-		getline(stream, S_Table_Name, ',');
-		getline(stream, S_Long_Name, ',');
-		getline(stream, S_Alpha_Code, ',');
-		getline(stream, S_Currency, ',');
-		getline(stream, S_Region, ',');
-		getline(stream, S_WB_Code, ',');
-		getline(stream, S_Latest_Census, '\n');
+		if (stream.peek() == '\"'){
+			stream.get();
+			getline(stream, S_Country_Code, '\"');
+			consumeComma = true;
+		}
+		else {
+			if (consumeComma) {
+				stream.get();
+				consumeComma = false;
+			}
+			getline(stream, S_Country_Code, ',');
+		}
+		
+		if (stream.peek() == '\"') {
+			stream.get();
+			getline(stream, S_Short_Name, '\"');
+			consumeComma = true;
+		}
+		else {
+			if (consumeComma) {
+				stream.get();
+				consumeComma = false;
+			}
+			getline(stream, S_Short_Name, ',');
+		}
+		
+		if (stream.peek() == '\"') {
+			stream.get();
+			getline(stream, S_Table_Name, '\"');
+			consumeComma = true;
+		}
+		else {
+			if (consumeComma) {
+				stream.get();
+				consumeComma = false;
+			}
+			getline(stream, S_Table_Name, ',');
+		}
+
+		if (stream.peek() == '\"') {
+			stream.get();
+			getline(stream, S_Long_Name, '\"');
+			consumeComma = true;
+		}
+		else {
+			if (consumeComma) {
+				stream.get();
+				consumeComma = false;
+			}
+			getline(stream, S_Long_Name, ',');
+		}
+
+		if (stream.peek() == '\"') {
+			stream.get();
+			getline(stream, S_Alpha_Code, '\"');
+			consumeComma = true;
+		}
+		else {
+			if (consumeComma) {
+				stream.get();
+				consumeComma = false;
+			}
+			getline(stream, S_Alpha_Code, ',');
+		}
+
+		if (stream.peek() == '\"') {
+			stream.get();
+			getline(stream, S_Currency, '\"');
+			consumeComma = true;
+		}
+		else {
+			if (stream.peek() == ',')
+				stream.get();
+			getline(stream, S_Currency, ',');
+		}
+
+		if (stream.peek() == '\"') {
+			stream.get();
+			getline(stream, S_Region, '\"');
+			consumeComma = true;
+		}
+		else {
+			if (consumeComma) {
+				stream.get();
+				consumeComma = false;
+			}
+			getline(stream, S_Region, ',');
+		}
+
+		if (stream.peek() == '\"') {
+			stream.get();
+			getline(stream, S_WB_Code, '\"');
+			consumeComma = true;
+		}
+		else {
+			if (consumeComma) {
+				stream.get();
+				consumeComma = false;
+			}
+			getline(stream, S_WB_Code, ',');
+		}
+
+		/*if (stream.peek() == '\"') {
+			stream.get();
+			getline(stream, S_Latest_Census, '\"');
+		}
+		else {*/
+			//if (stream.peek() == ',')
+				//stream.get();
+			getline(stream, S_Latest_Census, '\n');
+		//}
 		
 
 		std::size_t length;
@@ -161,15 +265,15 @@ struct record {
 		newRecord.next = next;
 	}
 	void print() {
-		std::cout << Country_Code << ",";
-		std::cout << Short_Name << ",";
-		std::cout << Table_Name << ",";
-		std::cout << Long_Name << ",";
-		std::cout << Alpha_Code << ",";
-		std::cout << Currency << ",";
-		std::cout << Region << ",";
-		std::cout << WB_Code << ",";
-		std::cout << Latest_Census << "\n";
+		std::cout << "Country_Code "  << Country_Code << ",";
+		std::cout << "Short_Name " << Short_Name << ",";
+		std::cout << "Table_Name "<< Table_Name << ",";
+		std::cout << "Long_Name " << Long_Name << ",";
+		std::cout << "Alpha_Code " << Alpha_Code << ",";
+		std::cout << "Currency " << Currency << ",";
+		std::cout << "Region " << Region << ",";
+		std::cout << "WB_Code " << WB_Code << ",";
+		std::cout << "Latest_Census " << Latest_Census << "\n";
 
 	}
 };
