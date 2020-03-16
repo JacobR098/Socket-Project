@@ -42,7 +42,8 @@ int main(int argc, char* argv[]) {
 	int ringSize = 0;
 	bool DHT_Exists = false;
 	bool DHT_Busy = false;
-
+	char departingUser[CHARLENGTH];
+	//bool leaveRequested = false;
 
 	if (argc != 2) {
 		fprintf(stderr, "Usage: %s <PORT NUMBER>\n", argv[0]);
@@ -182,9 +183,10 @@ int main(int argc, char* argv[]) {
 				srand(time(NULL));
 				
 				int randomIndex;
-				do {
-					randomIndex = rand() % stateTable.size();
-				} while (stateTable[randomIndex].state == Free);
+				randomIndex = rand() % stateTable.size();
+				while (stateTable[randomIndex].state == Free) {
+					randomIndex = (randomIndex + 1) % stateTable.size();
+				}
 
 				replyMessage.code = 4;
 				replyMessage.header = 1;
@@ -197,6 +199,63 @@ int main(int argc, char* argv[]) {
 				sendto(sock, &replyMessage, sizeof(replyMessage), 0, (struct sockaddr*)& echoClntAddr, cliAddrLen);
 			}
 
+		}
+		/*
+		//leave-dht <user-name>
+		*/
+		else if (receivedMessage.code == 5) {
+		if (!DHT_Exists || !userExists(stateTable, receivedMessage.senderName) || stateOfUser(stateTable, receivedMessage.senderName) == Free || DHT_Busy || ringSize <= 2) {
+			replyMessage.code = 5;
+			replyMessage.header = -1;
+
+			sendto(sock, &replyMessage, sizeof(replyMessage), 0, (struct sockaddr*)& echoClntAddr, cliAddrLen);
+
+			}
+			//Store user-name and wait for dht-rebuilt
+			else {
+				DHT_Busy = true;
+				strcpy(departingUser, receivedMessage.senderName);
+				replyMessage.code = 5;
+				replyMessage.header = 1;
+	
+				sendto(sock, &replyMessage, sizeof(replyMessage), 0, (struct sockaddr*)& echoClntAddr, cliAddrLen);
+			}
+
+		}
+
+		else if (receivedMessage.code == 6) {
+			if (strcmp(receivedMessage.senderName, departingUser) != 0) {
+				
+				replyMessage.code = 6;
+				replyMessage.header = -1;
+				sendto(sock, &replyMessage, sizeof(replyMessage), 0, (struct sockaddr*)& echoClntAddr, cliAddrLen);
+			}
+			else{
+				replyMessage.code = 6;
+				replyMessage.header = 1;
+				sendto(sock, &replyMessage, sizeof(replyMessage), 0, (struct sockaddr*)& echoClntAddr, cliAddrLen);
+				
+				for (unsigned int i = 0; i < stateTable.size(); i++) {
+					if (strcmp(stateTable[i].userName, receivedMessage.senderName) == 0)
+						stateTable[i].state = Free;
+				}
+				for (unsigned int i = 0; i < stateTable.size(); i++) {
+					if (stateTable[i].state == Leader && strcmp(stateTable[i].userName, receivedMessage.inAddress) != 0) {
+						stateTable[i].state = InDHT;
+						cout << "Changed " << stateTable[i].userName << " from Leader to InDHT\n";
+					}
+					if (strcmp(stateTable[i].userName, receivedMessage.inAddress) == 0) {
+						if (stateTable[i].state == Leader)
+							cout << stateTable[i].userName << " was already the previous Leader. No need to set new Leader\n";
+						else {
+							stateTable[i].state = Leader;
+							cout << "Changed " << stateTable[i].userName << " to Leader\n";
+						}
+					}
+				}
+				ringSize--;
+				cout << "Size of ring is now " << ringSize << endl;
+			}
 		}
 	}//End of infinite for loop
 }

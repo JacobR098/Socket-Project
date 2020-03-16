@@ -55,8 +55,13 @@ char userName[CHARLENGTH];
 char ipAddress[CHARLENGTH];
 unsigned short myPorts[3];
 record** hashTable = new record*[HASH_TABLE_SIZE];
-
-
+bool leavingDHT = false;
+char leftNeighborIPAddress[CHARLENGTH];
+char rightNeighborIPAddress[CHARLENGTH];
+unsigned short leftNeighborPort;
+unsigned short rightNeighborPort;
+char leftNeighborUserName[CHARLENGTH];
+char rightNeighborUserName[CHARLENGTH];
 
 void sendCommand() {
 	while (!registered)
@@ -114,6 +119,8 @@ void sendCommand() {
 		}
 		else if (receivedMessage.code == 2 && receivedMessage.header == 1) {
 			ringSize = receivedMessage.num;
+			hostID = 0;//added
+			leavingDHT = false;//added
 			ringNodes = new userInfo[ringSize];
 			for (int i = 0; i < ringSize; i++) {
 				recvfrom(servSock, &ringNodes[i], sizeof(ringNodes[i]), 0, (struct sockaddr*) & fromAddr, &fromSize);
@@ -133,10 +140,18 @@ void sendCommand() {
 			inet_pton(AF_INET, ringNodes[ringSize - 1].inAddress, &(leftNeighbor.sin_addr));
 			leftNeighbor.sin_port = htons(ringNodes[ringSize - 1].ports[2]);
 
+			strcpy(leftNeighborIPAddress, ringNodes[ringSize - 1].inAddress);
+			leftNeighborPort = ringNodes[ringSize - 1].ports[2];
+			strcpy(leftNeighborUserName, ringNodes[ringSize - 1].userName);
+
 			memset(&rightNeighbor, 0, sizeof(rightNeighbor));
 			rightNeighbor.sin_family = AF_INET;
 			inet_pton(AF_INET, ringNodes[1].inAddress, &(rightNeighbor.sin_addr));
 			rightNeighbor.sin_port = htons(ringNodes[1].ports[1]);
+
+			strcpy(rightNeighborIPAddress, ringNodes[ringSize + 1].inAddress);
+			rightNeighborPort = ringNodes[ringSize + 1].ports[1];
+			strcpy(rightNeighborUserName, ringNodes[ringSize + 1].userName);
 
 			//Send set-id to members of the DHT
 			for (int i = 1; i < ringSize; i++) {
@@ -179,7 +194,7 @@ void sendCommand() {
 			for (int i = 0; i < LINES_OF_DATA; i++) {
 				ASCII_Sum = 0;
 				currentRecord = record(in);
-				currentRecord.print();
+				//currentRecord.print();
 				int j = 0;
 				while (currentRecord.Long_Name[j] != '\0') {
 					ASCII_Sum += currentRecord.Long_Name[j];
@@ -219,7 +234,7 @@ void sendCommand() {
 						DieWithError("Error sending message to right neighbor\n");
 				}
 			}//End of for loop
-
+			in.close();
 			myMessage.code = 3;
 			myMessage.header = 0;
 			strcpy(myMessage.senderName, userName);
@@ -237,9 +252,9 @@ void sendCommand() {
 			cout << "Attempt to query-dht returned SUCCESS\n";
 			cout << "Enter the Long Name to search the DHT for: ";
 			string searchString;
-			cin >> searchString;
+			getline(cin, searchString);
 			//cin.clear();
-			cin.ignore(1000, '\n');
+			//cin.ignore(1000, '\n');
 			//char searchArray[100];
 			size_t length = searchString.copy(myMessage.searchName, 100 - 1);
 			myMessage.searchName[length] = '\0';
@@ -265,7 +280,18 @@ void sendCommand() {
 			//Segfault??
 		}
 
-		
+		else if (receivedMessage.code == 5 && receivedMessage.header == -1) {
+			cout << "Server returned FAILURE to \"leave-dht command\"\n";
+		}
+		else if (receivedMessage.code == 5 && receivedMessage.header == 1) {
+			cout << "Server returned SUCCESS to \"leave-dht command\"\n"; 
+			
+			myMessage.code = 99; //destroy DHT
+			strcpy(myMessage.senderName, userName);
+
+			sendto(servSock, &myMessage, sizeof(myMessage), 0, (struct sockaddr*)& rightNeighbor, sizeof(rightNeighbor));
+						
+		}
 	}//End of while
 }
 
@@ -319,7 +345,7 @@ int main(int argc, char* argv[]) {
 	//struct message myMessage, receivedMessage;
 	
 	sendCommand();
-	cout << "Finished registering\nCreating thread\n";
+	//cout << "Finished registering\nCreating thread\n";
 	registered = false;
 	stopReregister = true;
 	thread worker(sendCommand);
@@ -347,16 +373,24 @@ int main(int argc, char* argv[]) {
 				hostID = receivedMessage.id;
 				cout << "Set id to " << hostID << endl;
 
+				leavingDHT = false;
 				memset(&leftNeighbor, 0, sizeof(leftNeighbor));
 				leftNeighbor.sin_family = AF_INET;
 				inet_pton(AF_INET, receivedMessage.neighbors[0].inAddress, &(leftNeighbor.sin_addr));
 				leftNeighbor.sin_port = htons(receivedMessage.neighbors[0].ports[2]);
+
+				strcpy(leftNeighborIPAddress, receivedMessage.neighbors[0].inAddress);
+				leftNeighborPort = receivedMessage.neighbors[0].ports[2];
+				strcpy(leftNeighborUserName, receivedMessage.neighbors[0].userName);
 
 				memset(&rightNeighbor, 0, sizeof(rightNeighbor));
 				rightNeighbor.sin_family = AF_INET;
 				inet_pton(AF_INET, receivedMessage.neighbors[1].inAddress, &(rightNeighbor.sin_addr));
 				rightNeighbor.sin_port = htons(receivedMessage.neighbors[1].ports[1]);
 
+				strcpy(rightNeighborIPAddress, receivedMessage.neighbors[1].inAddress);
+				rightNeighborPort = receivedMessage.neighbors[1].ports[1];
+				strcpy(rightNeighborUserName, receivedMessage.neighbors[1].userName);
 				cout << "Neighbors setup\n";
 			}
 			else if (receivedMessage.code == 13 && receivedMessage.header == 0) {
@@ -471,7 +505,7 @@ int main(int argc, char* argv[]) {
 					int valChecker;
 					if (valChecker = sendto(servSock, &myMessage, sizeof(myMessage), 0, (struct sockaddr*) & rightNeighbor, sizeof(rightNeighbor)) == -1)
 						DieWithError("Error sending message to right neighbor\n");
-				}		
+				}
 			}
 			else if (receivedMessage.code == 13 && receivedMessage.header == 0) {
 				cout << "Processing query for Long Name " << receivedMessage.searchName << endl;
@@ -480,7 +514,7 @@ int main(int argc, char* argv[]) {
 				while (receivedMessage.searchName[j] != '\0') {
 					ASCII_sum += receivedMessage.searchName[j];
 					j++;
-				}				
+				}
 				cout << "ASCII value is " << ASCII_sum << endl;
 				pos = ASCII_sum % HASH_TABLE_SIZE;
 				id = pos % ringSize;
@@ -540,9 +574,161 @@ int main(int argc, char* argv[]) {
 					sendto(servSock, &myMessage, sizeof(myMessage), 0, (struct sockaddr*) & rightNeighbor, sizeof(rightNeighbor));
 				}
 			}
+			else if (receivedMessage.code == 99) {
+				cout << "Received Message: teardown DHT\n";
+				for (int i = 0; i < HASH_TABLE_SIZE; i++) {
+					delete hashTable[i];
+					hashTable[i] = NULL;
+				}
+
+				//If this is not the user which initiated the leave-dht command, propagate the teardown to the right neighbor
+				if (strcmp(receivedMessage.senderName, userName) != 0) {
+					myMessage.code = 99;
+					strcpy(myMessage.senderName, receivedMessage.senderName);
+
+					cout << "Sending teardownto right neighbor\n";
+					sendto(servSock, &myMessage, sizeof(myMessage), 0, (struct sockaddr*) & rightNeighbor, sizeof(rightNeighbor));
+				}
+				//At the user which initiated the leave-dht command
+				else {
+					myMessage.code = 51;//reset-id
+					myMessage.id = 0;
+					strcpy(myMessage.senderName, userName);
+
+					cout << "Teardown has propagated back. Sending reset-id to right neighbor.\n";
+					sendto(servSock, &myMessage, sizeof(myMessage), 0, (struct sockaddr*) & rightNeighbor, sizeof(rightNeighbor));
+				}
+			}
+			else if (receivedMessage.code == 51) {
+				cout << "Received Message: reset-id\n";
+				if (strcmp(receivedMessage.senderName, userName) != 0) {
+					hostID = receivedMessage.id;
+					myMessage.code = 51;
+					myMessage.id = hostID + 1;
+					ringSize--;
+					strcpy(myMessage.senderName, receivedMessage.senderName);
+
+					cout << "ID changed to " << hostID << ". Ring Size changed to " << ringSize << ".\n";
+
+					sendto(servSock, &myMessage, sizeof(myMessage), 0, (struct sockaddr*) & rightNeighbor, sizeof(rightNeighbor));
+				}
+				//At the user which intiated the leave-dht command
+				else {
+					myMessage.code = 55;//reset-left
+					strcpy(myMessage.random.inAddress, leftNeighborIPAddress);
+					myMessage.port[0] = leftNeighborPort;
+
+					cout << "Reset-id has propagated back. Sending reset-left to right neighbor.\n";
+					sendto(servSock, &myMessage, sizeof(myMessage), 0, (struct sockaddr*) & rightNeighbor, sizeof(rightNeighbor));
+
+					myMessage.code = 59;//reset-right
+					strcpy(myMessage.random.inAddress, rightNeighborIPAddress);
+					myMessage.port[0] = rightNeighborPort;
+
+					cout << "Sending reset-right to left neighbor.\n";
+					sendto(servSock, &myMessage, sizeof(myMessage), 0, (struct sockaddr*) & leftNeighbor, sizeof(leftNeighbor));
+
+					myMessage.code = 60;//rebuild-dht
+
+					sendto(servSock, &myMessage, sizeof(myMessage), 0, (struct sockaddr*) & rightNeighbor, sizeof(rightNeighbor));
+					
+					//Message server that DHT is rebuilt
+					myMessage.code = 6;
+					strcpy(myMessage.senderName, userName);
+					//Use inAddress to hold value of newLeader's userName
+					strcpy(myMessage.inAddress, rightNeighborUserName);
+
+					sendto(servSock, &myMessage, sizeof(myMessage), 0, (struct sockaddr*)& echoServAddr, sizeof(echoServAddr));
+
+				}
+			}
+			else if (receivedMessage.code == 55) {
+				cout << "Recieved Message: reset-left\n";
+				strcpy(leftNeighborIPAddress, receivedMessage.random.inAddress);
+				leftNeighborPort = receivedMessage.port[0];
+
+				memset(&leftNeighbor, 0, sizeof(leftNeighbor));
+				leftNeighbor.sin_family = AF_INET;
+				inet_pton(AF_INET, leftNeighborIPAddress, &(leftNeighbor.sin_addr));
+				leftNeighbor.sin_port = htons(leftNeighborPort);
+			}
+
+			else if (receivedMessage.code == 60) {
+				cout << "Received Message: rebuild-dht\n";
+
+				//Construct the local DHT
+				ifstream in;
+				in.open(FILE_NAME);
+				record currentRecord;
+				string consume;
+				int ASCII_Sum;
+				getline(in, consume);
+				for (int i = 0; i < LINES_OF_DATA; i++) {
+					ASCII_Sum = 0;
+					currentRecord = record(in);
+					//currentRecord.print();
+					int j = 0;
+					while (currentRecord.Long_Name[j] != '\0') {
+						ASCII_Sum += currentRecord.Long_Name[j];
+						j++;
+					}
+					//cout << "ASCII Sum for record " << i << " is: " << ASCII_Sum << endl;
+					int pos, id;
+					pos = ASCII_Sum % HASH_TABLE_SIZE;
+					id = pos % ringSize;
+
+
+					//tempRecord->print();
+
+					//Store in DHT of Leader
+					if (hostID == id) {
+
+						record* tempRecord = new record;
+						currentRecord.copyTo(*tempRecord);
+
+						if (hashTable[pos] == NULL) {
+							hashTable[pos] = tempRecord;
+						}
+						else {
+							tempRecord->next = hashTable[pos];
+							hashTable[pos] = tempRecord;
+						}
+					}
+					else {
+						myMessage.code = 12;
+						myMessage.num = pos;
+						myMessage.id = id;
+						myMessage.header = 0;
+						currentRecord.copyTo(myMessage.currentRecord);
+
+						int valChecker;
+						if (valChecker = sendto(servSock, &myMessage, sizeof(myMessage), 0, (struct sockaddr*) & rightNeighbor, sizeof(rightNeighbor)) == -1)
+							DieWithError("Error sending message to right neighbor\n");
+					}
+				}//End of for loop
+				in.close();
+				/*myMessage.code = 61;
+				myMessage.header = 0;
+				strcpy(myMessage.senderName, userName);
+				int valChecker;
+				if (valChecker = sendto(servSock, &myMessage, sizeof(myMessage), 0, (struct sockaddr*) &fromAddr, sizeof(fromAddr)) == -1)
+					DieWithError("Error sending dht-complete to leaving host\n");			
+					*/
+			}
 		}
+		queryLen = recvfrom(rightSock, &receivedMessage, sizeof(receivedMessage), MSG_DONTWAIT, (struct sockaddr*) & fromAddr, &fromSize);
+		if (queryLen > -1) {
+			if (receivedMessage.code == 59) {
+				cout << "Recieved Message: reset-right\n";	
+				strcpy(rightNeighborIPAddress, receivedMessage.random.inAddress);
+				rightNeighborPort = receivedMessage.port[0];
 
-
+				memset(&rightNeighbor, 0, sizeof(rightNeighbor));
+				rightNeighbor.sin_family = AF_INET;
+				inet_pton(AF_INET, rightNeighborIPAddress, &(rightNeighbor.sin_addr));
+				rightNeighbor.sin_port = htons(rightNeighborPort);
+			}
+		}
 	}//End of for loop
 	cout << "Detaching BAD\n";
 	worker.detach();
